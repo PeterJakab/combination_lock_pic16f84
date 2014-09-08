@@ -1,0 +1,94 @@
+keytable: subroutine 82-89
+	input = scancode of key ( = row * 4 + column + 1) in keycode
+	output = ASCII code of key
+
+eep_read: subroutine 91-110
+	read the code from EEPROM to RAM
+	the actual code is read into the RAM @ address cod
+
+eep_write: subroutine 112-147
+	write the code into EEPROM from RAM
+	the actual code is written into the EEPROM from RAM address cod
+
+udelay: subroutine 149-161
+	input = delay length in 100 usecs
+
+	delay main program execution for the given time
+	delay constant is calculated from the defined mhz variable
+	for the actual frequency
+
+beep: subroutine 163-172
+	input = length of the beep
+	generate a beep on the PB3 output pin
+
+keyscan: subroutine 174-206
+	output = ASCII code of a pressed key or 0 if no key is found
+
+	scan the keyboard for a pressed key
+
+	keycode = 0, rowcnt = 4
+	select row 0 (pull PA0 pin low, float PA1, PA2, PA3)
+rowscan: scan a selected keyboard row for a pressed key
+	delay 100 ms (debounce delay & charge row)
+	read PB4-PB7 pins as column inputs from the row into colstatus
+	colcnt = 4
+colscan: keycode = keycode + 1 (keycode is the scancode of the actual key checked)
+	rotate right colstatus bits
+	if the lowest bit was 0, a pressed key is found: exit with sub keytable
+	otherwise colcnt = colcnt - 1
+	if colcnt > 0, goto label colscan
+	otherwise select next row (pull the according PA# pin low, float others)
+	rowcnt = rowcnt - 1
+	if rowcnt > 0, goto label rowscan
+	return with 0: no key found pressed
+
+main: 208-217
+	program execution starts here
+	setup PORTA, PORTB pin states
+
+	PORTA pins are outputs, PORTB0-3 are outputs
+	PORTB4-7 are inputs with internal pullup resistors
+
+warm: 219-221
+	generate a beep, indicating that the program is running
+	call subroutine eep_read to read the actual code from EEPROM
+
+loop: 223-
+	program main loop
+	clear all PORTB pins
+	call subroutine read to read a code from the keyboard
+	call subroutine compbuf to compare the code read in with the actual code
+	if combuf returned with * as last character entered, goto codechange
+	otherwise
+pulseout: send out a pulse on PB2 pin. Use the defined pulsewidth variable as
+	delay in 20 ms steps. Go back to loop when finished
+
+codechange: setup PB1 pin to indicate code change on the LED
+	call subroutine read to read the new code from the keyboard
+	copy read in code into the RAM storage area of the actual code
+	call subroutine read to read the new code again from the keyboard
+	call subroutine compuf to compare the code read in with the previous one
+	if the new code was not correctly entered twice, goto label warm
+	(this will reset the actual code in RAM from the EEPROM and beep to indicate
+	the code change was not successful)
+	otherwise call subroutine eep_write to write the new code into EEPROM
+	and go back to loop
+
+read:	subroutine 266-351
+	read a sequence of keys with length clen into the RAM buffer @ readbuf
+	only the last clen characters are stored, previous characters are lost.
+	go sleep when the keyboard is inactive. The * or # key is used to terminate
+	the sequence. If pressed and at least clen characters were entered, the
+	subroutine returns. Otherwise, all entered characters are cleared and a new
+	read starts.
+
+compbuf: subroutine 353-378
+	input = RAM address of buffer to compare with
+	output = Z, status of match
+
+	compare the read buffer with the given buffer, set flag Z
+
+copybuf: subroutine 380-401
+	input = RAM address of buffer to copy to
+
+	copy the read buffer to the given buffer
